@@ -1444,9 +1444,9 @@ class CameraViewModel(application: Application) : ApertureViewModel(application)
                 videoQuality
             ] ?: error("Video quality not supported")
 
-            val videoFrameRate = cameraConfiguration.videoFrameRate.takeIf {
-                videoQualityInfo.supportedFrameRates.contains(it)
-            } ?: videoQualityInfo.supportedFrameRates.firstOrNull()
+            val videoFrameRate = videoQualityInfo.getClosestFrameRate(
+                cameraConfiguration.videoFrameRate
+            )
 
             val videoDynamicRange = cameraConfiguration.videoDynamicRange.takeIf {
                 videoQualityInfo.supportedDynamicRanges.contains(it)
@@ -1713,9 +1713,9 @@ class CameraViewModel(application: Application) : ApertureViewModel(application)
                 "Camera ${camera.cameraId} does not support video quality $videoQuality"
             )
 
-            val videoFrameRate = preferencesRepository.videoFrameRate.value.takeIf {
-                videoQualityInfo.supportedFrameRates.contains(it)
-            } ?: videoQualityInfo.supportedFrameRates.firstOrNull()
+            val videoFrameRate = videoQualityInfo.getClosestFrameRate(
+                preferencesRepository.videoFrameRate.value
+            )
 
             val videoDynamicRange = preferencesRepository.videoDynamicRange.value.takeIf {
                 videoQualityInfo.supportedDynamicRanges.contains(it)

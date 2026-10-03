@@ -17,4 +17,14 @@ data class VideoQualityInfo(
     val quality: Quality,
     val supportedFrameRates: Set<FrameRate>,
     val supportedDynamicRanges: Set<VideoDynamicRange>,
-)
+) {
+    fun getClosestFrameRate(frameRate: FrameRate?): FrameRate? {
+        if (frameRate == null) {
+            return supportedFrameRates.firstOrNull()
+        }
+
+        return frameRate.takeIf { supportedFrameRates.contains(it) }
+            ?: supportedFrameRates.filter { it < frameRate }.maxOrNull()
+            ?: supportedFrameRates.minOrNull()
+    }
+}
