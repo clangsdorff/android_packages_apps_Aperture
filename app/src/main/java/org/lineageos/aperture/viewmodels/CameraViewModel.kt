@@ -652,6 +652,39 @@ class CameraViewModel(application: Application) : ApertureViewModel(application)
         )
 
     /**
+     * Whether high resolution photos are available and enabled, null when unavailable.
+     */
+    @OptIn(ExperimentalCoroutinesApi::class)
+    val photoHighResolution = cameraConfiguration
+        .mapLatest { cameraConfiguration ->
+            when (cameraConfiguration) {
+                is CameraConfiguration.Photo -> cameraConfiguration.takeIf {
+                    supportsPhotoHighResolution(it.camera)
+                }?.enableHighResolution
+
+                else -> null
+            }
+        }
+        .flowOn(Dispatchers.IO)
+        .stateIn(
+            scope = viewModelScope,
+            started = SharingStarted.Eagerly,
+            initialValue = null,
+        )
+
+    /**
+     * Whether zoom is locked to 1x, the HAL can't crop high resolution captures.
+     */
+    @OptIn(ExperimentalCoroutinesApi::class)
+    val isZoomLocked = photoHighResolution
+        .mapLatest { photoHighResolution -> photoHighResolution == true }
+        .stateIn(
+            scope = viewModelScope,
+            started = SharingStarted.Eagerly,
+            initialValue = false,
+        )
+
+    /**
      * Photo effect.
      * @see ExtensionMode.Mode
      */
@@ -1408,10 +1441,28 @@ class CameraViewModel(application: Application) : ApertureViewModel(application)
         }
 
     /**
+     * Toggle high resolution photos.
+     */
+    fun togglePhotoHighResolution() =
+        updateConfiguration<CameraConfiguration.Photo> { cameraConfiguration ->
+            preferencesRepository.photoHighResolution.value =
+                !cameraConfiguration.enableHighResolution
+
+            createInitialCameraConfiguration(
+                camera = cameraConfiguration.camera,
+                cameraMode = CameraMode.PHOTO,
+            )
+        }
+
+    /**
      * Cycle the photo aspect ratio.
      */
     fun cyclePhotoAspectRatio() =
         updateConfiguration<CameraConfiguration.Photo> { cameraConfiguration ->
+            if (cameraConfiguration.enableHighResolution) {
+                return@updateConfiguration cameraConfiguration
+            }
+
             val newAspectRatio = when (cameraConfiguration.photoAspectRatio) {
                 AspectRatio.RATIO_4_3 -> AspectRatio.RATIO_16_9
                 AspectRatio.RATIO_16_9 -> AspectRatio.RATIO_4_3
@@ -1550,6 +1601,10 @@ class CameraViewModel(application: Application) : ApertureViewModel(application)
      * @param zoomRatio The zoom ratio to apply
      */
     fun smoothZoom(zoomRatio: Float) {
+        if (isZoomLocked.value) {
+            return
+        }
+
         val acquired = zoomGestureMutex.tryLock()
         if (!acquired) {
             return
@@ -1668,11 +1723,17 @@ class CameraViewModel(application: Application) : ApertureViewModel(application)
                 else -> photoCaptureMode
             }
 
+            val enableHighResolution = supportsPhotoHighResolution(camera)
+                    && preferencesRepository.photoHighResolution.value
+
             val usePhotoJpegUltraHdr = preferencesRepository.usePhotoJpegUltraHdr.value
             val enableRawImageCapture = preferencesRepository.enableRawImageCapture.value
             val disableJpegWithRaw = preferencesRepository.disableJpegWithRaw.value
             val photoOutputFormat = when {
                 inSingleCaptureMode.value -> PhotoOutputFormat.JPEG
+
+                // The HAL skips remosaic when RAW shares the request
+                enableHighResolution -> PhotoOutputFormat.JPEG
 
                 enableRawImageCapture
                         && disableJpegWithRaw
@@ -1696,8 +1757,11 @@ class CameraViewModel(application: Application) : ApertureViewModel(application)
                 extensionMode = preferencesRepository.photoEffect.value,
                 camera2Options = buildPhotoCamera2Options(camera, photoCaptureMode),
                 photoCaptureMode = photoCaptureMode,
-                photoAspectRatio = preferencesRepository.photoAspectRatio.value,
-                enableHighResolution = overlaysRepository.enableHighResolution,
+                photoAspectRatio = when (enableHighResolution) {
+                    true -> AspectRatio.RATIO_4_3
+                    false -> preferencesRepository.photoAspectRatio.value
+                },
+                enableHighResolution = enableHighResolution,
                 photoOutputFormat = photoOutputFormat,
             )
         }
@@ -1738,6 +1802,11 @@ class CameraViewModel(application: Application) : ApertureViewModel(application)
             camera = camera,
         )
     }
+
+    private fun supportsPhotoHighResolution(camera: Camera) =
+        overlaysRepository.enableHighResolution
+                && camera.supportsHighResolution
+                && !inSingleCaptureMode.value
 
     @androidx.annotation.OptIn(ExperimentalZeroShutterLag::class)
     private fun buildPhotoCamera2Options(

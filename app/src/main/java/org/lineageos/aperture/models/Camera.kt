@@ -5,6 +5,7 @@
 
 package org.lineageos.aperture.models
 
+import android.graphics.ImageFormat
 import android.hardware.camera2.CameraCharacteristics
 import android.hardware.camera2.CameraMetadata
 import android.media.MediaRecorder
@@ -127,6 +128,29 @@ class Camera private constructor(
                 }.map { dynamicRangeToQualities -> dynamicRangeToQualities.key }.toSet()
             )
         }
+
+    private val activeArraySize = camera2CameraInfo.getCameraCharacteristic(
+        CameraCharacteristics.SENSOR_INFO_ACTIVE_ARRAY_SIZE
+    )
+
+    private val jpegOutputSizes = streamConfigurationMap?.getOutputSizes(
+        ImageFormat.JPEG
+    ).orEmpty().toList()
+
+    private val highResolutionJpegSizes = streamConfigurationMap?.getHighResolutionOutputSizes(
+        ImageFormat.JPEG
+    ).orEmpty().toList() + jpegOutputSizes.filter { exceedsActiveArray(it) }
+
+    val supportsHighResolution = highResolutionJpegSizes.isNotEmpty()
+
+    val highResolutionMegapixels = highResolutionJpegSizes.maxOfOrNull { it.megapixels() } ?: 0
+
+    val defaultMegapixels = jpegOutputSizes.filterNot {
+        highResolutionJpegSizes.contains(it)
+    }.maxOfOrNull { it.megapixels() } ?: 0
+
+    fun isHighResolutionSize(size: Size) = highResolutionJpegSizes.contains(size)
+            || exceedsActiveArray(size)
 
     val supportedVideoStabilizationModes = buildList {
         add(VideoStabilizationMode.OFF)
@@ -284,6 +308,12 @@ class Camera private constructor(
         supportedVideoQualities[videoQuality]?.supportedFrameRates?.let {
             videoFrameRate == null || it.contains(videoFrameRate)
         } ?: true
+
+    private fun exceedsActiveArray(size: Size) = activeArraySize?.let {
+        size.width.toLong() * size.height > it.width().toLong() * it.height()
+    } ?: false
+
+    private fun Size.megapixels() = ((width.toLong() * height + 500_000) / 1_000_000).toInt()
 
     private fun canSustainFrameRate(resolution: Size?, frameRate: FrameRate): Boolean {
         val minFrameDuration = resolution?.let {

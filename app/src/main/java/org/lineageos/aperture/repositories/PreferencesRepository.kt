@@ -266,6 +266,14 @@ class PreferencesRepository(
     ).asPreferenceHolder()
 
     /**
+     * Whether photos should be taken at the camera's high resolution sizes.
+     */
+    val photoHighResolution = primitivePreference(
+        key = "photo_high_resolution",
+        defaultValue = false,
+    ).asPreferenceHolder()
+
+    /**
      * Whether bright screen should be enabled.
      */
     val brightScreen = primitivePreference(

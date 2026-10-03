@@ -151,6 +151,7 @@ open class CameraActivity : AppCompatActivity(R.layout.activity_camera) {
 
     // Views
     private val aspectRatioButton by lazy { findViewById<Button>(R.id.aspectRatioButton) }
+    private val highResolutionButton by lazy { findViewById<Button>(R.id.highResolutionButton) }
     private val cameraModeSelectorLayout by lazy { findViewById<CameraModeSelectorLayout>(R.id.cameraModeSelectorLayout) }
     private val capturePreviewLayout by lazy { findViewById<CapturePreviewLayout>(R.id.capturePreviewLayout) }
     private val countDownView by lazy { findViewById<CountDownView>(R.id.countDownView) }
@@ -239,9 +240,13 @@ open class CameraActivity : AppCompatActivity(R.layout.activity_camera) {
                 }
 
                 is ZoomGestureDetector.ZoomEvent.Move -> {
-                    viewModel.cameraController.onPinchToZoom(it.incrementalScaleFactor)
-                    handler.removeMessages(MSG_ON_PINCH_TO_ZOOM)
-                    handler.sendMessageDelayed(handler.obtainMessage(MSG_ON_PINCH_TO_ZOOM), 500)
+                    if (!viewModel.isZoomLocked.value) {
+                        viewModel.cameraController.onPinchToZoom(it.incrementalScaleFactor)
+                        handler.removeMessages(MSG_ON_PINCH_TO_ZOOM)
+                        handler.sendMessageDelayed(
+                            handler.obtainMessage(MSG_ON_PINCH_TO_ZOOM), 500
+                        )
+                    }
                 }
 
                 is ZoomGestureDetector.ZoomEvent.End -> {
@@ -431,6 +436,7 @@ open class CameraActivity : AppCompatActivity(R.layout.activity_camera) {
 
         // Set secondary top bar button callbacks
         aspectRatioButton.setOnClickListener { viewModel.cyclePhotoAspectRatio() }
+        highResolutionButton.setOnClickListener { viewModel.togglePhotoHighResolution() }
         videoQualityButton.setOnClickListener { viewModel.cycleVideoQuality() }
         videoFrameRateButton.setOnClickListener { viewModel.cycleVideoFrameRate() }
         videoDynamicRangeButton.setOnClickListener { viewModel.cycleVideoDynamicRange() }
@@ -494,7 +500,9 @@ open class CameraActivity : AppCompatActivity(R.layout.activity_camera) {
         }
 
         zoomLevel.onProgressChangedByUser = {
-            viewModel.cameraController.setLinearZoom(it)
+            if (!viewModel.isZoomLocked.value) {
+                viewModel.cameraController.setLinearZoom(it)
+            }
         }
         zoomLevel.textFormatter = {
             "%.1fx".format(viewModel.zoomState.value?.zoomRatio)
@@ -870,6 +878,8 @@ open class CameraActivity : AppCompatActivity(R.layout.activity_camera) {
                 // Update secondary bar buttons
                 timerButton.isEnabled = cameraState == CameraState.IDLE
                 aspectRatioButton.isEnabled = cameraState == CameraState.IDLE
+                        && !viewModel.isZoomLocked.value
+                highResolutionButton.isEnabled = cameraState == CameraState.IDLE
                 effectButton.isEnabled = cameraState == CameraState.IDLE
                 settingsButton.isEnabled = cameraState == CameraState.IDLE
 
@@ -1090,6 +1100,14 @@ open class CameraActivity : AppCompatActivity(R.layout.activity_camera) {
 
         launch {
             viewModel.zoomState.collectLatest { zoomState ->
+                if (viewModel.isZoomLocked.value) {
+                    zoomState?.takeIf { it.zoomRatio != 1f }?.let {
+                        viewModel.cameraController.setZoomRatio(1f)
+                    }
+                    zoomLevel.isVisible = false
+                    return@collectLatest
+                }
+
                 zoomState?.takeIf { it.minZoomRatio != it.maxZoomRatio }?.let {
                     zoomLevel.progress = it.linearZoom
                     zoomLevel.isVisible = true
@@ -1150,6 +1168,34 @@ open class CameraActivity : AppCompatActivity(R.layout.activity_camera) {
         launch {
             viewModel.isShutterButtonEnabled.collectLatest { isShutterButtonEnabled ->
                 shutterButton.isEnabled = isShutterButtonEnabled
+            }
+        }
+
+        launch {
+            viewModel.photoHighResolution.collectLatest { photoHighResolution ->
+                highResolutionButton.isVisible = photoHighResolution != null
+                aspectRatioButton.isEnabled = photoHighResolution != true
+                        && viewModel.cameraState.value == CameraState.IDLE
+
+                if (photoHighResolution == true) {
+                    viewModel.cameraController.setZoomRatio(1f)
+                }
+            }
+        }
+
+        launch {
+            viewModel.cameraConfiguration.collectLatest { cameraConfiguration ->
+                if (cameraConfiguration is CameraConfiguration.Photo) {
+                    val camera = cameraConfiguration.camera
+
+                    highResolutionButton.text = getString(
+                        R.string.photo_megapixels,
+                        when (cameraConfiguration.enableHighResolution) {
+                            true -> camera.highResolutionMegapixels
+                            false -> camera.defaultMegapixels
+                        },
+                    )
+                }
             }
         }
 
@@ -1534,6 +1580,15 @@ open class CameraActivity : AppCompatActivity(R.layout.activity_camera) {
                                 ResolutionSelector.PREFER_CAPTURE_RATE_OVER_HIGHER_RESOLUTION
                             }
                         )
+                        .apply {
+                            if (!cameraConfiguration.enableHighResolution) {
+                                val camera = cameraConfiguration.camera
+
+                                setResolutionFilter { supportedSizes, _ ->
+                                    supportedSizes.filterNot { camera.isHighResolutionSize(it) }
+                                }
+                            }
+                        }
                         .build()
 
                 CameraController.IMAGE_CAPTURE
