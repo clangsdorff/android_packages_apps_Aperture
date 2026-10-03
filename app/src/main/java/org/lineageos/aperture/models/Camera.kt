@@ -280,6 +280,11 @@ class Camera private constructor(
         }
     }
 
+    fun supportsVideoFrameRate(videoQuality: Quality, videoFrameRate: FrameRate?) =
+        supportedVideoQualities[videoQuality]?.supportedFrameRates?.let {
+            videoFrameRate == null || it.contains(videoFrameRate)
+        } ?: true
+
     private fun canSustainFrameRate(resolution: Size?, frameRate: FrameRate): Boolean {
         val minFrameDuration = resolution?.let {
             runCatching {

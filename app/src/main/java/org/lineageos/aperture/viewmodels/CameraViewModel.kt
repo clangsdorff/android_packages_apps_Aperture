@@ -261,11 +261,18 @@ class CameraViewModel(application: Application) : ApertureViewModel(application)
      */
     val lenses = combine(
         cameraRepository.cameras,
-        camera,
-        cameraMode,
-    ) { cameras, camera, cameraMode ->
+        cameraConfiguration,
+    ) { cameras, cameraConfiguration ->
+        val camera = cameraConfiguration.camera
+
         camera to cameras.filter {
-            it.cameraFacing == camera.cameraFacing && it.supportsCameraMode(cameraMode)
+            it.cameraFacing == camera.cameraFacing
+                    && it.supportsCameraMode(cameraConfiguration.cameraMode)
+                    && (cameraConfiguration !is CameraConfiguration.Video
+                    || it.supportsVideoFrameRate(
+                cameraConfiguration.videoQuality,
+                cameraConfiguration.videoFrameRate,
+            ))
         }
     }
         .flowOn(Dispatchers.IO)
