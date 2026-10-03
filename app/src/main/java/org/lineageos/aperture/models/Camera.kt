@@ -7,7 +7,9 @@ package org.lineageos.aperture.models
 
 import android.hardware.camera2.CameraCharacteristics
 import android.hardware.camera2.CameraMetadata
+import android.media.MediaRecorder
 import android.os.Build
+import android.util.Size
 import androidx.annotation.OptIn
 import androidx.camera.camera2.interop.Camera2CameraInfo
 import androidx.camera.camera2.interop.ExperimentalCamera2Interop
@@ -19,6 +21,7 @@ import androidx.camera.core.ExperimentalZeroShutterLag
 import androidx.camera.core.ImageCapture
 import androidx.camera.extensions.ExtensionsManager
 import androidx.camera.video.Quality
+import androidx.camera.video.QualitySelector
 import androidx.camera.video.Recorder
 import androidx.core.util.toClosedRange
 import androidx.lifecycle.asFlow
@@ -98,11 +101,19 @@ class Camera private constructor(
         videoCapabilities.getSupportedQualities(it.dynamicRange)
     }
 
+    private val streamConfigurationMap = camera2CameraInfo.getCameraCharacteristic(
+        CameraCharacteristics.SCALER_STREAM_CONFIGURATION_MAP
+    )
+
     val supportedVideoQualities =
         videoQualityForDynamicRanges.values.flatten().toSet().associateWith {
+            val videoResolution = QualitySelector.getResolution(cameraInfo, it)
+
             VideoQualityInfo(
                 it,
-                supportedVideoFrameRates.toMutableSet().apply {
+                supportedVideoFrameRates.filter { frameRate ->
+                    canSustainFrameRate(videoResolution, frameRate)
+                }.toMutableSet().apply {
                     additionalVideoFrameRates[it].orEmpty().forEach { (frameRate, remove) ->
                         if (remove) {
                             remove(frameRate)
@@ -267,6 +278,17 @@ class Camera private constructor(
             CameraMode.VIDEO -> supportedVideoQualities.isNotEmpty()
             else -> true
         }
+    }
+
+    private fun canSustainFrameRate(resolution: Size?, frameRate: FrameRate): Boolean {
+        val minFrameDuration = resolution?.let {
+            runCatching {
+                streamConfigurationMap?.getOutputMinFrameDuration(MediaRecorder::class.java, it)
+            }.getOrNull()
+        } ?: return true
+
+        // 1% slack for HALs that round 1e9 / fps up
+        return minFrameDuration * frameRate.value <= 1_010_000_000L
     }
 
     private inline fun <T : Enum<T>> Camera2CameraInfo.getAndMapCameraCharacteristics(
