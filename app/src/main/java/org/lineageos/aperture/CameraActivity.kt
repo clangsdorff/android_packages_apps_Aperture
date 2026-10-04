@@ -1534,6 +1534,8 @@ open class CameraActivity : AppCompatActivity(R.layout.activity_camera) {
             }) not supported by camera ${cameraConfiguration.camera.cameraId}"
         }
 
+        viewModel.cameraController.previewResolutionSelector = null
+
         // Initialize the use case we want and set its properties
         val cameraUseCases = when (cameraConfiguration) {
             is CameraConfiguration.Photo -> {
@@ -1619,6 +1621,14 @@ open class CameraActivity : AppCompatActivity(R.layout.activity_camera) {
                 // Set the quality
                 viewModel.cameraController.videoCaptureQualitySelector =
                     QualitySelector.from(cameraConfiguration.videoQuality)
+
+                // Some HALs have no 4:3 sensor mode above 30fps
+                viewModel.cameraController.previewResolutionSelector =
+                    ResolutionSelector.Builder()
+                        .setAspectRatioStrategy(
+                            AspectRatioStrategy.RATIO_16_9_FALLBACK_AUTO_STRATEGY
+                        )
+                        .build()
 
                 // Set the dynamic range
                 viewModel.cameraController.videoCaptureDynamicRange =
