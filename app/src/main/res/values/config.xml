@@ -15,6 +15,11 @@
         <item>52</item>
     </string-array>
 
+    <!-- List of ID of macro cameras. These are only offered in the macro camera mode. -->
+    <string-array name="config_macroCameraIds">
+        <item>54</item>
+    </string-array>
+
     <!-- Decide whether to ignore auxiliary cameras that
          are logical (made of multiple physical sensors).
          Set this to false if your camera HAL doesn't expose

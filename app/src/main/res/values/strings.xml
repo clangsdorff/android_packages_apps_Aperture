@@ -239,6 +239,7 @@
     <string name="camera_mode_photo">Photo</string>
     <string name="camera_mode_video">Video</string>
     <string name="camera_mode_qr">Scan</string>
+    <string name="camera_mode_macro">Macro</string>
 
     <!-- Video dynamic ranges -->
     <string name="video_dynamic_range_sdr" translatable="false">SDR</string>

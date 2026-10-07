@@ -49,6 +49,11 @@ class OverlaysRepository(private val context: Context) {
     val ignoredAuxCameraIds = getStringArray(R.array.config_ignoredAuxCameraIds)
 
     /**
+     * @see R.array.config_macroCameraIds
+     */
+    val macroCameraIds = getStringArray(R.array.config_macroCameraIds)
+
+    /**
      * @see R.bool.config_ignoreLogicalAuxCameras
      */
     val ignoreLogicalAuxCameras = getBoolean(R.bool.config_ignoreLogicalAuxCameras)

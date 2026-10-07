@@ -90,6 +90,7 @@ class PreferencesRepository(
             when (it) {
                 CameraMode.PHOTO -> "photo"
                 CameraMode.VIDEO -> "video"
+                CameraMode.MACRO -> "macro"
                 CameraMode.QR -> "qr"
             }
         },

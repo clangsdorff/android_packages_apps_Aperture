@@ -175,6 +175,7 @@
     <string name="camera_mode_photo">Fotoğraf</string>
     <string name="camera_mode_video">Video</string>
     <string name="camera_mode_qr">Tara</string>
+    <string name="camera_mode_macro">Makro</string>
     <string name="video_mirror_mode_off">Kapalı</string>
     <string name="video_mirror_mode_on">Açık</string>
     <string name="video_mirror_mode_on_ffc_only">Yalnızca ön kamera</string>

@@ -9,9 +9,11 @@ import android.animation.ValueAnimator
 import android.content.Context
 import android.util.AttributeSet
 import android.view.LayoutInflater
+import android.view.View
 import android.widget.FrameLayout
 import android.widget.LinearLayout
 import androidx.core.view.doOnLayout
+import androidx.core.view.doOnNextLayout
 import androidx.core.view.isInvisible
 import androidx.core.view.isVisible
 import com.google.android.material.button.MaterialButton
@@ -35,8 +37,10 @@ class CameraModeSelectorLayout @JvmOverloads constructor(
 
     private val cameraToButton = mutableMapOf<CameraMode, MaterialButton>()
 
+    private var availableCameraModes = CameraMode.entries.filter { it != CameraMode.MACRO }
     private var inSingleCaptureMode = false
     private var cameraState = CameraState.IDLE
+    private var currentCameraMode: CameraMode? = null
 
     var onModeSelectedCallback: (cameraMode: CameraMode) -> Unit = {}
 
@@ -53,6 +57,7 @@ class CameraModeSelectorLayout @JvmOverloads constructor(
                     when (cameraMode) {
                         CameraMode.PHOTO -> R.string.camera_mode_photo
                         CameraMode.VIDEO -> R.string.camera_mode_video
+                        CameraMode.MACRO -> R.string.camera_mode_macro
                         CameraMode.QR -> R.string.camera_mode_qr
                     }
                 )
@@ -64,6 +69,8 @@ class CameraModeSelectorLayout @JvmOverloads constructor(
     }
 
     fun setCurrentCameraMode(cameraMode: CameraMode) {
+        currentCameraMode = cameraMode
+
         val currentCameraModeButton =
             cameraToButton[cameraMode] ?: throw Exception("No button for $cameraMode")
 
@@ -93,6 +100,16 @@ class CameraModeSelectorLayout @JvmOverloads constructor(
         }
     }
 
+    fun setAvailableCameraModes(availableCameraModes: List<CameraMode>) {
+        this.availableCameraModes = availableCameraModes
+
+        updateButtons()
+
+        cameraModeButtonsLinearLayout.doOnNextLayout {
+            currentCameraMode?.let { setCurrentCameraMode(it) }
+        }
+    }
+
     fun setInSingleCaptureMode(inSingleCaptureMode: Boolean) {
         this.inSingleCaptureMode = inSingleCaptureMode
 
@@ -115,7 +132,11 @@ class CameraModeSelectorLayout @JvmOverloads constructor(
     private fun updateButtons() {
         cameraModeHighlightButton.isInvisible = cameraState.isRecordingVideo || inSingleCaptureMode
         cameraToButton.forEach {
-            it.value.isInvisible = cameraState.isRecordingVideo || inSingleCaptureMode
+            it.value.visibility = when {
+                it.key !in availableCameraModes -> View.GONE
+                cameraState.isRecordingVideo || inSingleCaptureMode -> View.INVISIBLE
+                else -> View.VISIBLE
+            }
         }
     }
 }

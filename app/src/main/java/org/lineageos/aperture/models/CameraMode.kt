@@ -22,10 +22,20 @@ enum class CameraMode(
             FlashMode.TORCH,
         ),
     ),
+    MACRO(
+        setOf(
+            FlashMode.OFF,
+            FlashMode.AUTO,
+            FlashMode.ON,
+            FlashMode.TORCH,
+        ),
+    ),
     QR(
         setOf(
             FlashMode.OFF,
             FlashMode.TORCH,
         ),
-    ),
+    );
+
+    val capturesPhotos get() = this == PHOTO || this == MACRO
 }

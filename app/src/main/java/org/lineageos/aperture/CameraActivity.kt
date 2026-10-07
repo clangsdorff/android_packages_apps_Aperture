@@ -526,7 +526,9 @@ open class CameraActivity : AppCompatActivity(R.layout.activity_camera) {
         shutterButton.setOnClickListener {
             // Shutter animation
             when (viewModel.cameraMode.value) {
-                CameraMode.PHOTO -> startShutterAnimation(ShutterAnimation.PhotoCapture)
+                CameraMode.PHOTO, CameraMode.MACRO ->
+                    startShutterAnimation(ShutterAnimation.PhotoCapture)
+
                 CameraMode.VIDEO -> {
                     if (countDownView.cancelCountDown()) {
                         viewModel.cameraState.value = CameraState.IDLE
@@ -543,7 +545,7 @@ open class CameraActivity : AppCompatActivity(R.layout.activity_camera) {
 
             startTimerAndRun {
                 when (viewModel.cameraMode.value) {
-                    CameraMode.PHOTO -> viewModel.takePhoto()
+                    CameraMode.PHOTO, CameraMode.MACRO -> viewModel.takePhoto()
                     CameraMode.VIDEO -> viewModel.captureVideo()
                     else -> {}
                 }
@@ -738,6 +740,7 @@ open class CameraActivity : AppCompatActivity(R.layout.activity_camera) {
 
                 // Update primary bar buttons
                 shutterButton.isInvisible = cameraMode == CameraMode.QR
+                lensSelectorLayout.isInvisible = cameraMode == CameraMode.MACRO
 
                 // Update camera mode selector
                 cameraModeSelectorLayout.setCurrentCameraMode(cameraMode)
@@ -745,20 +748,29 @@ open class CameraActivity : AppCompatActivity(R.layout.activity_camera) {
         }
 
         launch {
+            viewModel.availableCameraModes.collectLatest { availableCameraModes ->
+                cameraModeSelectorLayout.setAvailableCameraModes(availableCameraModes)
+            }
+        }
+
+        launch {
             viewModel.cameraModeTransition.collectLatest { (oldCameraMode, newCameraMode) ->
                 when (oldCameraMode) {
-                    CameraMode.PHOTO -> when (newCameraMode) {
+                    CameraMode.PHOTO, CameraMode.MACRO -> when (newCameraMode) {
                         CameraMode.VIDEO -> startShutterAnimation(ShutterAnimation.PhotoToVideo)
                         else -> startShutterAnimation(ShutterAnimation.InitPhoto)
                     }
 
                     CameraMode.VIDEO -> when (newCameraMode) {
-                        CameraMode.PHOTO -> startShutterAnimation(ShutterAnimation.VideoToPhoto)
+                        CameraMode.PHOTO, CameraMode.MACRO ->
+                            startShutterAnimation(ShutterAnimation.VideoToPhoto)
+
                         else -> startShutterAnimation(ShutterAnimation.InitVideo)
                     }
 
                     CameraMode.QR, null -> when (newCameraMode) {
-                        CameraMode.PHOTO -> startShutterAnimation(ShutterAnimation.InitPhoto)
+                        CameraMode.PHOTO, CameraMode.MACRO ->
+                            startShutterAnimation(ShutterAnimation.InitPhoto)
 
                         CameraMode.VIDEO -> startShutterAnimation(ShutterAnimation.InitVideo)
 

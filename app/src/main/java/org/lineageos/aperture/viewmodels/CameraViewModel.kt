@@ -51,6 +51,7 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.flowOn
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.mapLatest
 import kotlinx.coroutines.flow.onStart
 import kotlinx.coroutines.flow.runningFold
@@ -244,6 +245,22 @@ class CameraViewModel(application: Application) : ApertureViewModel(application)
         )
 
     /**
+     * The [CameraMode]s at least one camera supports.
+     */
+    val availableCameraModes = cameraRepository.cameras
+        .map { cameras ->
+            CameraMode.entries.filter { cameraMode ->
+                cameras.any { it.supportsCameraMode(cameraMode) }
+            }
+        }
+        .flowOn(Dispatchers.IO)
+        .stateIn(
+            scope = viewModelScope,
+            started = SharingStarted.Eagerly,
+            initialValue = CameraMode.entries.filter { it != CameraMode.MACRO },
+        )
+
+    /**
      * Flow used for camera mode animations.
      */
     val cameraModeTransition = cameraMode
@@ -366,7 +383,7 @@ class CameraViewModel(application: Application) : ApertureViewModel(application)
         qrFlashMode,
     ) { cameraConfiguration, photoFlashMode, videoFlashMode, qrFlashMode ->
         when (cameraConfiguration.cameraMode) {
-            CameraMode.PHOTO -> photoFlashMode
+            CameraMode.PHOTO, CameraMode.MACRO -> photoFlashMode
             CameraMode.VIDEO -> videoFlashMode
             CameraMode.QR -> qrFlashMode
         }
@@ -390,7 +407,7 @@ class CameraViewModel(application: Application) : ApertureViewModel(application)
         val flashMode = wantedFlashMode.takeIf { it in supportedFlashModes } ?: FlashMode.OFF
 
         val shouldForceTorch = forceTorch
-                && cameraConfiguration.cameraMode == CameraMode.PHOTO
+                && cameraConfiguration.cameraMode.capturesPhotos
                 && FlashMode.TORCH in cameraConfiguration.camera.supportedFlashModes
 
         when (shouldForceTorch) {
@@ -709,7 +726,7 @@ class CameraViewModel(application: Application) : ApertureViewModel(application)
         cameraMode,
         photoCaptureMode,
     ) { cameraConfiguration, cameraMode, photoCaptureMode ->
-        cameraMode == CameraMode.PHOTO &&
+        cameraMode.capturesPhotos &&
                 photoCaptureMode != ImageCapture.CAPTURE_MODE_ZERO_SHUTTER_LAG &&
                 cameraConfiguration.camera.supportedExtensionModes.size > 1
     }
@@ -1019,13 +1036,16 @@ class CameraViewModel(application: Application) : ApertureViewModel(application)
      * [initialCameraMode] and [initialCameraFacing] must be initialized.
      */
     suspend fun initializeCameraConfiguration(): Boolean {
-        val cameraMode = initialCameraMode
+        var cameraMode = initialCameraMode
         val cameraFacing = initialCameraFacing
 
         val camera = getSuitableCamera(
             cameraMode = cameraMode,
             cameraFacing = cameraFacing,
-        ) ?: return false
+        ) ?: getSuitableCamera(
+            cameraMode = CameraMode.PHOTO,
+            cameraFacing = cameraFacing,
+        )?.also { cameraMode = CameraMode.PHOTO } ?: return false
 
         val cameraConfiguration = createInitialCameraConfiguration(
             camera = camera,
@@ -1339,12 +1359,14 @@ class CameraViewModel(application: Application) : ApertureViewModel(application)
     /**
      * Switch to the previous camera mode.
      */
-    fun previousCameraMode() = cameraMode.value.previous()?.let { setCameraMode(it) }
+    fun previousCameraMode() =
+        availableCameraModes.value.previous(cameraMode.value)?.let { setCameraMode(it) }
 
     /**
      * Switch to the next camera mode.
      */
-    fun nextCameraMode() = cameraMode.value.next()?.let { setCameraMode(it) }
+    fun nextCameraMode() =
+        availableCameraModes.value.next(cameraMode.value)?.let { setCameraMode(it) }
 
     /**
      * Cycle flash mode
@@ -1356,7 +1378,7 @@ class CameraViewModel(application: Application) : ApertureViewModel(application)
         val cameraConfiguration = _cameraConfiguration.value ?: return false
 
         // Long-press is supported only on photo mode and if torch mode is available
-        val forceTorchAvailable = cameraConfiguration.cameraMode == CameraMode.PHOTO
+        val forceTorchAvailable = cameraConfiguration.cameraMode.capturesPhotos
                 && cameraConfiguration.camera.supportedFlashModes.contains(FlashMode.TORCH)
         if (forceTorch && !forceTorchAvailable) {
             this.forceTorch.value = false
@@ -1377,7 +1399,9 @@ class CameraViewModel(application: Application) : ApertureViewModel(application)
 
                 false -> supportedFlashModes.value.toList().next(flashMode.value)?.let {
                     when (cameraConfiguration.cameraMode) {
-                        CameraMode.PHOTO -> preferencesRepository.photoFlashMode.value = it
+                        CameraMode.PHOTO, CameraMode.MACRO ->
+                            preferencesRepository.photoFlashMode.value = it
+
                         CameraMode.VIDEO -> preferencesRepository.videoFlashMode.value = it
                         CameraMode.QR -> qrFlashMode.value = it
                     }
@@ -1450,7 +1474,7 @@ class CameraViewModel(application: Application) : ApertureViewModel(application)
 
             createInitialCameraConfiguration(
                 camera = cameraConfiguration.camera,
-                cameraMode = CameraMode.PHOTO,
+                cameraMode = cameraConfiguration.cameraMode,
             )
         }
 
@@ -1708,7 +1732,7 @@ class CameraViewModel(application: Application) : ApertureViewModel(application)
         camera: Camera,
         cameraMode: CameraMode,
     ) = when (cameraMode) {
-        CameraMode.PHOTO -> {
+        CameraMode.PHOTO, CameraMode.MACRO -> {
             // Enable ZSL when requested by the user and supported by the camera
             val photoCaptureMode = when (
                 val photoCaptureMode = preferencesRepository.photoCaptureMode.value
@@ -1763,6 +1787,7 @@ class CameraViewModel(application: Application) : ApertureViewModel(application)
                 },
                 enableHighResolution = enableHighResolution,
                 photoOutputFormat = photoOutputFormat,
+                cameraMode = cameraMode,
             )
         }
 

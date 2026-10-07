@@ -44,6 +44,7 @@ class Camera private constructor(
     val logicalZoomRatios: SortedMap<Float, Float>,
     additionalVideoFrameRates: Map<Quality, Map<FrameRate, Boolean>>,
     val supportedExtensionModes: Set<Int>,
+    val isMacro: Boolean,
 ) {
     /**
      * The [androidx.camera.core.CameraSelector] for this camera.
@@ -277,8 +278,15 @@ class Camera private constructor(
         add(FlashMode.OFF)
 
         if (cameraInfo.hasFlashUnit()) {
-            add(FlashMode.AUTO)
-            add(FlashMode.ON)
+            val aeModes = camera2CameraInfo.getCameraCharacteristic(
+                CameraCharacteristics.CONTROL_AE_AVAILABLE_MODES
+            )
+            if (aeModes?.contains(CameraMetadata.CONTROL_AE_MODE_ON_AUTO_FLASH) != false) {
+                add(FlashMode.AUTO)
+            }
+            if (aeModes?.contains(CameraMetadata.CONTROL_AE_MODE_ON_ALWAYS_FLASH) != false) {
+                add(FlashMode.ON)
+            }
             add(FlashMode.TORCH)
         }
 
@@ -299,8 +307,9 @@ class Camera private constructor(
 
     fun supportsCameraMode(cameraMode: CameraMode): Boolean {
         return when (cameraMode) {
-            CameraMode.VIDEO -> supportedVideoQualities.isNotEmpty()
-            else -> true
+            CameraMode.MACRO -> isMacro
+            CameraMode.VIDEO -> !isMacro && supportedVideoQualities.isNotEmpty()
+            else -> !isMacro
         }
     }
 
@@ -358,6 +367,7 @@ class Camera private constructor(
                 logicalZoomRatios,
                 additionalVideoFrameRates,
                 supportedExtensionModes,
+                cameraId in overlaysRepository.macroCameraIds,
             )
         }
     }

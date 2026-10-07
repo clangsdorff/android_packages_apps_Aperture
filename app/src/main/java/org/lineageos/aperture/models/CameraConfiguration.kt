@@ -84,9 +84,8 @@ sealed interface CameraConfiguration {
         val photoAspectRatio: Int,
         val enableHighResolution: Boolean,
         val photoOutputFormat: PhotoOutputFormat,
-    ) : CameraConfiguration {
-        override val cameraMode = CameraMode.PHOTO
-    }
+        override val cameraMode: CameraMode = CameraMode.PHOTO,
+    ) : CameraConfiguration
 
     /**
      * Video mode configuration.
